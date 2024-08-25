@@ -19,9 +19,9 @@ export async function GET(request: Request) {
   const url = new URL(request.url); // Parse the request URL
   const payload: ActionGetResponse = {
     // Define the GET response payload
-    icon: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS7dPPWr-BRKzBy_Fig0v_snt-_onQj9Pl5xA&s", // Icon URL
-    title: "Donate to the Rahul", // Title
-    description: "Support rahul by donating SOL.", // Description
+    icon: "https://ichef.bbci.co.uk/news/1024/cpsprodpb/FC92/production/_115785646_hitler_councilor.jpg.webp", // Icon URL
+    title: "Donate To Get Black PP Small", // Title
+    description: "Support Hitler by donating SOL.", // Description
     label: "Donate", // Label for the action
     links: {
       actions: [
