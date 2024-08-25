@@ -15,11 +15,8 @@ import {
   clusterApiUrl, // Function to get cluster API URL
 } from "@solana/web3.js";
 
-// Define the constant URL
-const BASE_URL = "https://blinks-checking.vercel.app/";
-
 export async function GET(request: Request) {
-  const url = new URL(BASE_URL); // Use the hardcoded URL instead of request.url
+  const url = new URL(request.url); // Parse the request URL
   const payload: ActionGetResponse = {
     // Define the GET response payload
     icon: "https://ichef.bbci.co.uk/news/1024/cpsprodpb/FC92/production/_115785646_hitler_councilor.jpg.webp", // Icon URL
@@ -40,29 +37,12 @@ export async function GET(request: Request) {
   });
 }
 
+export const OPTIONS = GET; // Allow OPTIONS request to use GET handler
+
 export async function POST(request: Request) {
-  let body: ActionPostRequest;
-
-  try {
-    // Try parsing the request body as JSON
-    body = await request.json();
-    console.log('Request body:', body); // Log the body to debug
-  } catch (error) {
-    console.error('Error parsing request body:', error);
-    return Response.json(
-      {
-        error: {
-          message: "Invalid request body format", // More specific error message
-        },
-      },
-      {
-        status: 400, // Bad request status
-        headers: ACTIONS_CORS_HEADERS,
-      }
-    );
-  }
-
-  const url = new URL(BASE_URL); // Use the hardcoded URL instead of request.url
+  const body: ActionPostRequest = await request.json(); // Parse the request body
+  console.log('Request body:', body); // Log the body to debug
+  const url = new URL(request.url); // Parse the request URL
   const amount = Number(url.searchParams.get("amount")) || 0.1; // Get the amount from query params or default to 0.1
   let sender;
 
@@ -78,49 +58,34 @@ export async function POST(request: Request) {
       },
       {
         status: 400, // Bad request status
-        headers: ACTIONS_CORS_HEADERS,
+        headers: ACTIONS_CORS_HEADERS, // Set CORS headers
       }
     );
   }
+  const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed"); // Create a connection to the mainnet-beta cluster
 
-  try {
-    const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed"); // Create a connection to the mainnet-beta cluster
+  const transaction = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: sender, // Sender public key
+      toPubkey: new PublicKey("address"), // Recipient public key
+      lamports: amount * LAMPORTS_PER_SOL, // Amount to transfer in lamports
+    })
+  );
+  transaction.feePayer = sender; // Set the fee payer
+  transaction.recentBlockhash = (
+    await connection.getLatestBlockhash()
+  ).blockhash; // Get the latest blockhash
+  transaction.lastValidBlockHeight = (
+    await connection.getLatestBlockhash()
+  ).lastValidBlockHeight; // Get the last valid block height
 
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: sender, // Sender public key
-        toPubkey: new PublicKey("address"), // Recipient public key
-        lamports: amount * LAMPORTS_PER_SOL, // Amount to transfer in lamports
-      })
-    );
-
-    transaction.feePayer = sender; // Set the fee payer
-    const latestBlockhash = await connection.getLatestBlockhash();
-    transaction.recentBlockhash = latestBlockhash.blockhash; // Get the latest blockhash
-    transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight; // Get the last valid block height
-
-    const payload: ActionPostResponse = await createPostResponse({
-      fields: {
-        transaction, // Add the transaction to the response payload
-        message: "Transaction created", // Success message
-      },
-    });
-    return new Response(JSON.stringify(payload), {
-      headers: ACTIONS_CORS_HEADERS,
-    });
-
-  } catch (error) {
-    console.error('Error creating transaction or fetching blockhash:', error);
-    return Response.json(
-      {
-        error: {
-          message: "Failed to create transaction", // Error message if transaction creation fails
-        },
-      },
-      {
-        status: 500, // Internal server error status
-        headers: ACTIONS_CORS_HEADERS,
-      }
-    );
-  }
+  const payload: ActionPostResponse = await createPostResponse({
+    fields: {
+      transaction, // Add the transaction to the response payload
+      message: "Transaction created", // Success message
+    },
+  });
+  return new Response(JSON.stringify(payload), {
+    headers: ACTIONS_CORS_HEADERS, // Set CORS headers
+  });
 }
