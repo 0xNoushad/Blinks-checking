@@ -15,10 +15,12 @@ import {
   clusterApiUrl, // Function to get cluster API URL
 } from "@solana/web3.js";
 
+// Define the constant URL
+const BASE_URL = "https://blinks-checking.vercel.app/";
+
 export async function GET(request: Request) {
-  const url = new URL(request.url); // Parse the request URL
+  const url = new URL(BASE_URL);  
   const payload: ActionGetResponse = {
-    // Define the GET response payload
     icon: "https://ichef.bbci.co.uk/news/1024/cpsprodpb/FC92/production/_115785646_hitler_councilor.jpg.webp", // Icon URL
     title: "Donate To Get Black PP Small", // Title
     description: "Support Hitler by donating SOL.", // Description
@@ -32,17 +34,34 @@ export async function GET(request: Request) {
       ],
     },
   };
-  return Response.json(payload, {
+  return new Response(JSON.stringify(payload), {
     headers: ACTIONS_CORS_HEADERS, // Set CORS headers
   });
 }
 
-export const OPTIONS = GET; // Allow OPTIONS request to use GET handler
-
 export async function POST(request: Request) {
-  const body: ActionPostRequest = await request.json(); // Parse the request body
-  console.log('Request body:', body); // Log the body to debug
-  const url = new URL(request.url); // Parse the request URL
+  let body: ActionPostRequest;
+
+  try {
+    // Parse the request body as JSON
+    body = await request.json();
+    console.log('Request body:', body); // Log the body to debug
+  } catch (error) {
+    console.error('Error parsing request body:', error);
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: "Invalid request body format", // More specific error message
+        },
+      }),
+      {
+        status: 400, // Bad request status
+        headers: ACTIONS_CORS_HEADERS,
+      }
+    );
+  }
+
+  const url = new URL(request.url); // Parse request URL
   const amount = Number(url.searchParams.get("amount")) || 0.1; // Get the amount from query params or default to 0.1
   let sender;
 
@@ -50,42 +69,58 @@ export async function POST(request: Request) {
     sender = new PublicKey(body.account); // Parse the sender public key
   } catch (error) {
     console.error('Invalid account error:', error); // Log the error for more details
-    return Response.json(
-      {
+    return new Response(
+      JSON.stringify({
         error: {
           message: "Invalid account", // Return error if invalid account
         },
-      },
+      }),
       {
         status: 400, // Bad request status
-        headers: ACTIONS_CORS_HEADERS, // Set CORS headers
+        headers: ACTIONS_CORS_HEADERS,
       }
     );
   }
-  const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed"); // Create a connection to the mainnet-beta cluster
 
-  const transaction = new Transaction().add(
-    SystemProgram.transfer({
-      fromPubkey: sender, // Sender public key
-      toPubkey: new PublicKey("address"), // Recipient public key
-      lamports: amount * LAMPORTS_PER_SOL, // Amount to transfer in lamports
-    })
-  );
-  transaction.feePayer = sender; // Set the fee payer
-  transaction.recentBlockhash = (
-    await connection.getLatestBlockhash()
-  ).blockhash; // Get the latest blockhash
-  transaction.lastValidBlockHeight = (
-    await connection.getLatestBlockhash()
-  ).lastValidBlockHeight; // Get the last valid block height
+  try {
+    const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed"); // Create a connection to the mainnet-beta cluster
 
-  const payload: ActionPostResponse = await createPostResponse({
-    fields: {
-      transaction, // Add the transaction to the response payload
-      message: "Transaction created", // Success message
-    },
-  });
-  return new Response(JSON.stringify(payload), {
-    headers: ACTIONS_CORS_HEADERS, // Set CORS headers
-  });
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: sender, // Sender public key
+        toPubkey: new PublicKey("address"), // Recipient public key
+        lamports: amount * LAMPORTS_PER_SOL, // Amount to transfer in lamports
+      })
+    );
+
+    transaction.feePayer = sender; // Set the fee payer
+    const latestBlockhash = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = latestBlockhash.blockhash; // Get the latest blockhash
+    transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight; // Get the last valid block height
+
+    const payload: ActionPostResponse = await createPostResponse({
+      fields: {
+        transaction, // Add the transaction to the response payload
+        message: "Transaction created", // Success message
+      },
+    });
+
+    return new Response(JSON.stringify(payload), {
+      headers: ACTIONS_CORS_HEADERS,
+    });
+
+  } catch (error) {
+    console.error('Error creating transaction or fetching blockhash:', error);
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: "Failed to create transaction", // Error message if transaction creation fails
+        },
+      }),
+      {
+        status: 500, // Internal server error status
+        headers: ACTIONS_CORS_HEADERS,
+      }
+    );
+  }
 }
